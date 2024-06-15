@@ -122,7 +122,6 @@ class ClienteControllerITTest {
     }
 
     @Test
-    @Disabled
     void postPJTest() {
         // given
         final var cnpj = "1234";
@@ -151,7 +150,31 @@ class ClienteControllerITTest {
         assertEquals(nomeFantasia, entity.get().getNome());
     }
 
+@Test
+void listarTodosTest() {
+    // given
+    long expected = repository.count();
 
+    // when
+    var response = restTemplate.getForEntity(url, ClienteResponseDto[].class);
+
+    // then
+    assertEquals(HttpStatus.OK, response.getStatusCode());
+    assertEquals(expected, response.getBody().length);
+}
+
+@Test
+void listarTodosPorTipoTest() {
+    // given
+    List<Cliente> expected = repository.findAllByTipo(TipoCliente.PF);
+
+    // when
+    var response = restTemplate.getForEntity(url + "?tipoCliente=PF", ClienteResponseDto[].class);
+
+    // then
+    assertEquals(HttpStatus.OK, response.getStatusCode());
+    assertEquals(expected.size(), response.getBody().length);
+}
 
 
 
