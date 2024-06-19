@@ -1,6 +1,10 @@
 package br.ada.caixa.controller;
 
 import br.ada.caixa.dto.request.DepositoRequestDto;
+import br.ada.caixa.dto.request.InvestimentoRequestDto;
+import br.ada.caixa.dto.request.SaqueRequestDto;
+import br.ada.caixa.dto.request.TransferenciaRequestDto;
+import br.ada.caixa.dto.response.SaldoResponseDto;
 import br.ada.caixa.entity.Cliente;
 import br.ada.caixa.entity.Conta;
 import br.ada.caixa.entity.TipoCliente;
@@ -22,7 +26,6 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -88,8 +91,15 @@ class OperacoesBancariasControllerITTest {
                 .tipo(TipoCliente.PF)
                 .createdAt(LocalDate.now())
                 .build();
+        var cliente3 = Cliente.builder()
+                .documento("1234")
+                .nome("Teste 3")
+                .status(StatusCliente.ATIVO)
+                .tipo(TipoCliente.PJ)
+                .createdAt(LocalDate.now())
+                .build();
 
-        clienteRepository.saveAllAndFlush(List.of(cliente1, cliente2));
+        clienteRepository.saveAllAndFlush(List.of(cliente1, cliente2, cliente3));
 
         //CRIAR CONTAS
         var contaCorrente1 = Conta.builder()
@@ -109,8 +119,16 @@ class OperacoesBancariasControllerITTest {
                 .cliente(cliente2)
                 .createdAt(LocalDate.now())
                 .build();
+        var contaCorrente3 = Conta.builder()
+                .numero(3L)
+                .saldo(BigDecimal.ZERO)
+                .tipo(TipoConta.CONTA_CORRENTE)
+//                .cliente(clienteRepository.findByDocumento(cliente2.getDocumento()).get())
+                .cliente(cliente3)
+                .createdAt(LocalDate.now())
+                .build();
 
-        contaRepository.saveAllAndFlush(List.of(contaCorrente1, contaCorrente2));
+        contaRepository.saveAllAndFlush(List.of(contaCorrente1, contaCorrente2, contaCorrente3));
 
     }
 
@@ -142,23 +160,158 @@ class OperacoesBancariasControllerITTest {
         Mockito.verify(contaRepository).save(any(Conta.class));
     }
 
-    @Test
-    void sacar() {
-    }
+@Test
+void sacarPFTest() {
+    // given
+    final var valor = BigDecimal.valueOf(50.00);
+    final var numeroConta = 1L;
+    SaqueRequestDto saqueRequestDto =
+            SaqueRequestDto.builder()
+                    .numeroConta(numeroConta)
+                    .valor(valor)
+                    .build();
 
-    @Test
-    void transferencia() {
-    }
+    DepositoRequestDto depositoRequestDto =
+            DepositoRequestDto.builder()
+                    .numeroConta(numeroConta)
+                    .valor(valor)
+                    .build();
+    depositoService.depositar(depositoRequestDto.getNumeroConta(), depositoRequestDto.getValor());
 
-    @Test
-    void consultarSaldo() {
-    }
+    // when
+    var response = restTemplate.postForEntity(url + "/sacar", saqueRequestDto, Void.class);
 
-    @Test
-    void investir() {
-    }
+    // then
+    assertEquals(HttpStatus.OK, response.getStatusCode());
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(BigDecimal.ZERO.compareTo(contaRepository.findByNumero(numeroConta).get().getSaldo())).isZero();
+}
 
-    @Test
-    void abrirContaPoupanca() {
-    }
+@Test
+void sacarPJTest() {
+    // given
+    final var valor = BigDecimal.valueOf(50.00);
+    final var numeroConta = 3L;
+    SaqueRequestDto saqueRequestDto =
+            SaqueRequestDto.builder()
+                    .numeroConta(numeroConta)
+                    .valor(valor)
+                    .build();
+
+    DepositoRequestDto depositoRequestDto =
+            DepositoRequestDto.builder()
+                    .numeroConta(numeroConta)
+                    .valor(valor)
+                    .build();
+    depositoService.depositar(depositoRequestDto.getNumeroConta(), depositoRequestDto.getValor().multiply(new BigDecimal("1.005")));
+
+    // when
+    var response = restTemplate.postForEntity(url + "/sacar", saqueRequestDto, Void.class);
+
+    // then
+    assertEquals(HttpStatus.OK, response.getStatusCode());
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(BigDecimal.ZERO.compareTo(contaRepository.findByNumero(numeroConta).get().getSaldo())).isZero();
+}
+
+@Test
+void sacarTest_SaldoInsuficiente() {
+    // given
+    final var valor = BigDecimal.valueOf(100.00);
+    final var numeroConta = 1L;
+    SaqueRequestDto saqueRequestDto =
+            SaqueRequestDto.builder()
+                    .numeroConta(numeroConta)
+                    .valor(valor)
+                    .build();
+
+    // when
+    var response = restTemplate.postForEntity(url + "/sacar", saqueRequestDto, Void.class);
+
+    // then
+    assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+}
+
+@Test
+void transferenciaTest() {
+    // given
+    final var valor = BigDecimal.valueOf(50.00);
+    final var numeroContaOrigem = 1L;
+    final var numeroContaDestino = 2L;
+    TransferenciaRequestDto transferenciaRequestDto =
+            TransferenciaRequestDto.builder()
+                    .numeroContaOrigem(numeroContaOrigem)
+                    .numeroContaDestino(numeroContaDestino)
+                    .valor(valor)
+                    .build();
+
+    DepositoRequestDto depositoRequestDto =
+            DepositoRequestDto.builder()
+                    .numeroConta(numeroContaOrigem)
+                    .valor(valor)
+                    .build();
+    depositoService.depositar(depositoRequestDto.getNumeroConta(), depositoRequestDto.getValor());
+
+    // when
+    restTemplate.postForEntity(url + "/transferir", transferenciaRequestDto, Void.class);
+
+    // then
+    assertThat(BigDecimal.ZERO.compareTo(contaRepository.findByNumero(numeroContaOrigem).get().getSaldo())).isZero();
+    assertThat(valor.compareTo(contaRepository.findByNumero(numeroContaDestino).get().getSaldo())).isZero();
+}
+
+@Test
+void consultarSaldoTest() {
+    // given
+    final var numeroConta = 1L;
+
+    // when
+    var response = restTemplate.getForEntity(url + "/saldo/" + numeroConta, SaldoResponseDto.class);
+
+    // then
+    assertEquals(HttpStatus.OK, response.getStatusCode());
+    assertThat(response.getBody().getSaldo().compareTo(contaRepository.findByNumero(numeroConta).get().getSaldo())).isZero();
+}
+
+@Test
+void investirTest() {
+    // given
+    final var valor = BigDecimal.valueOf(100.00);
+    final var documentoCliente = "123456889";
+    InvestimentoRequestDto investimentoRequestDto =
+            InvestimentoRequestDto.builder()
+                    .documentoCliente(documentoCliente)
+                    .valor(valor)
+                    .build();
+
+    // when
+    var response = restTemplate.postForEntity(url + "/investimento", investimentoRequestDto, SaldoResponseDto.class);
+
+    // then
+    assertEquals(HttpStatus.OK, response.getStatusCode());
+    assertThat(response.getBody().getSaldo().compareTo(valor)).isZero();
+}
+
+@Test
+void abrirContaPoupancaTest() {
+    // given
+    final var cpf = "123456889";
+
+    var cliente = Cliente.builder()
+            .documento(cpf)
+            .nome("Teste Cliente")
+            .dataNascimento(LocalDate.now())
+            .status(StatusCliente.ATIVO)
+            .tipo(TipoCliente.PF)
+            .createdAt(LocalDate.now())
+            .build();
+    clienteRepository.saveAndFlush(cliente);
+
+    // when
+    var response = restTemplate.postForEntity(url + "/abrir-conta-poupanca/" + cpf, null, SaldoResponseDto.class);
+
+    // then
+    assertEquals(HttpStatus.OK, response.getStatusCode());
+    assertThat(response.getBody().getSaldo().compareTo(BigDecimal.ZERO)).isZero();
+}
 }
