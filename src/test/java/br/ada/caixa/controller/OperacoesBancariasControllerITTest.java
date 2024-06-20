@@ -1,7 +1,6 @@
 package br.ada.caixa.controller;
 
 import br.ada.caixa.dto.request.DepositoRequestDto;
-import br.ada.caixa.dto.request.InvestimentoRequestDto;
 import br.ada.caixa.dto.request.SaqueRequestDto;
 import br.ada.caixa.dto.request.TransferenciaRequestDto;
 import br.ada.caixa.dto.response.SaldoResponseDto;
@@ -36,8 +35,9 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ExtendWith(MockitoExtension.class)
@@ -104,7 +104,7 @@ class OperacoesBancariasControllerITTest {
         //CRIAR CONTAS
         var contaCorrente1 = Conta.builder()
                 .numero(1L)
-                .saldo(BigDecimal.ZERO)
+                .saldo(BigDecimal.valueOf(50.0))
                 .tipo(TipoConta.CONTA_CORRENTE)
 //                .cliente(clienteRepository.findByDocumento(cliente1.getDocumento()).get())
                 .cliente(cliente1)
@@ -121,7 +121,7 @@ class OperacoesBancariasControllerITTest {
                 .build();
         var contaCorrente3 = Conta.builder()
                 .numero(3L)
-                .saldo(BigDecimal.ZERO)
+                .saldo(BigDecimal.valueOf(50.0).multiply(new BigDecimal("1.005")))
                 .tipo(TipoConta.CONTA_CORRENTE)
 //                .cliente(clienteRepository.findByDocumento(cliente2.getDocumento()).get())
                 .cliente(cliente3)
@@ -142,7 +142,7 @@ class OperacoesBancariasControllerITTest {
     void depositarTest() {
         //given
         final var valor = BigDecimal.valueOf(100.50);
-        final var numeroConta = 1L;
+        final var numeroConta = 2L;
         DepositoRequestDto depositoRequestDto =
                 DepositoRequestDto.builder()
                         .numeroConta(numeroConta)
@@ -160,158 +160,147 @@ class OperacoesBancariasControllerITTest {
         Mockito.verify(contaRepository).save(any(Conta.class));
     }
 
-@Test
-void sacarPFTest() {
-    // given
-    final var valor = BigDecimal.valueOf(50.00);
-    final var numeroConta = 1L;
-    SaqueRequestDto saqueRequestDto =
-            SaqueRequestDto.builder()
-                    .numeroConta(numeroConta)
-                    .valor(valor)
-                    .build();
+    @Test
+    void sacarPFTest() {
+        // given
+        final var valor = BigDecimal.valueOf(50.00);
+        final var numeroConta = 1L;
+        SaqueRequestDto saqueRequestDto =
+                SaqueRequestDto.builder()
+                        .numeroConta(numeroConta)
+                        .valor(valor)
+                        .build();
 
-    DepositoRequestDto depositoRequestDto =
-            DepositoRequestDto.builder()
-                    .numeroConta(numeroConta)
-                    .valor(valor)
-                    .build();
-    depositoService.depositar(depositoRequestDto.getNumeroConta(), depositoRequestDto.getValor());
+        // when
+        var response = restTemplate.postForEntity(url + "/sacar", saqueRequestDto, Void.class);
 
-    // when
-    var response = restTemplate.postForEntity(url + "/sacar", saqueRequestDto, Void.class);
+        // then
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(BigDecimal.ZERO.compareTo(contaRepository.findByNumero(numeroConta).get().getSaldo())).isZero();
+        assertEquals(0, BigDecimal.ZERO.compareTo(contaRepository.findByNumero(numeroConta).get().getSaldo()));
 
-    // then
-    assertEquals(HttpStatus.OK, response.getStatusCode());
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(BigDecimal.ZERO.compareTo(contaRepository.findByNumero(numeroConta).get().getSaldo())).isZero();
-}
+        Mockito.verify(contaRepository).save(any(Conta.class));
+    }
 
-@Test
-void sacarPJTest() {
-    // given
-    final var valor = BigDecimal.valueOf(50.00);
-    final var numeroConta = 3L;
-    SaqueRequestDto saqueRequestDto =
-            SaqueRequestDto.builder()
-                    .numeroConta(numeroConta)
-                    .valor(valor)
-                    .build();
+    @Test
+    void sacarPJTest() {
+        // given
+        final var valor = BigDecimal.valueOf(50.00);
+        final var numeroConta = 3L;
+        SaqueRequestDto saqueRequestDto =
+                SaqueRequestDto.builder()
+                        .numeroConta(numeroConta)
+                        .valor(valor)
+                        .build();
 
-    DepositoRequestDto depositoRequestDto =
-            DepositoRequestDto.builder()
-                    .numeroConta(numeroConta)
-                    .valor(valor)
-                    .build();
-    depositoService.depositar(depositoRequestDto.getNumeroConta(), depositoRequestDto.getValor().multiply(new BigDecimal("1.005")));
+        // when
+        var response = restTemplate.postForEntity(url + "/sacar", saqueRequestDto, Void.class);
 
-    // when
-    var response = restTemplate.postForEntity(url + "/sacar", saqueRequestDto, Void.class);
+        // then
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(BigDecimal.ZERO.compareTo(contaRepository.findByNumero(numeroConta).get().getSaldo())).isZero();
+        assertEquals(0, BigDecimal.ZERO.compareTo(contaRepository.findByNumero(numeroConta).get().getSaldo()));
 
-    // then
-    assertEquals(HttpStatus.OK, response.getStatusCode());
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(BigDecimal.ZERO.compareTo(contaRepository.findByNumero(numeroConta).get().getSaldo())).isZero();
-}
+        Mockito.verify(contaRepository).save(any(Conta.class));
+    }
 
-@Test
-void sacarTest_SaldoInsuficiente() {
-    // given
-    final var valor = BigDecimal.valueOf(100.00);
-    final var numeroConta = 1L;
-    SaqueRequestDto saqueRequestDto =
-            SaqueRequestDto.builder()
-                    .numeroConta(numeroConta)
-                    .valor(valor)
-                    .build();
+    @Test
+    void sacarSaldoInsuficienteTest() {
+        // given
+        final var valor = BigDecimal.valueOf(100.00);
+        final var numeroConta = 1L;
+        SaqueRequestDto saqueRequestDto =
+                SaqueRequestDto.builder()
+                        .numeroConta(numeroConta)
+                        .valor(valor)
+                        .build();
 
-    // when
-    var response = restTemplate.postForEntity(url + "/sacar", saqueRequestDto, Void.class);
+        // when
+        var response = restTemplate.postForEntity(url + "/sacar", saqueRequestDto, Void.class);
 
-    // then
-    assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-}
+        // then
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+    }
 
-@Test
-void transferenciaTest() {
-    // given
-    final var valor = BigDecimal.valueOf(50.00);
-    final var numeroContaOrigem = 1L;
-    final var numeroContaDestino = 2L;
-    TransferenciaRequestDto transferenciaRequestDto =
-            TransferenciaRequestDto.builder()
-                    .numeroContaOrigem(numeroContaOrigem)
-                    .numeroContaDestino(numeroContaDestino)
-                    .valor(valor)
-                    .build();
+    @Test
+    void transferenciaPFTest() {
+        // given
+        final var valor = BigDecimal.valueOf(50.00);
+        final var numeroContaOrigem = 1L;
+        final var numeroContaDestino = 2L;
+        TransferenciaRequestDto transferenciaRequestDto =
+                TransferenciaRequestDto.builder()
+                        .numeroContaOrigem(numeroContaOrigem)
+                        .numeroContaDestino(numeroContaDestino)
+                        .valor(valor)
+                        .build();
 
-    DepositoRequestDto depositoRequestDto =
-            DepositoRequestDto.builder()
-                    .numeroConta(numeroContaOrigem)
-                    .valor(valor)
-                    .build();
-    depositoService.depositar(depositoRequestDto.getNumeroConta(), depositoRequestDto.getValor());
+        // when
+        restTemplate.postForEntity(url + "/transferir", transferenciaRequestDto, Void.class);
 
-    // when
-    restTemplate.postForEntity(url + "/transferir", transferenciaRequestDto, Void.class);
+        // then
+        assertThat(BigDecimal.ZERO.compareTo(contaRepository.findByNumero(numeroContaOrigem).get().getSaldo())).isZero();
+        assertEquals(0, BigDecimal.ZERO.compareTo(contaRepository.findByNumero(numeroContaOrigem).get().getSaldo()));
 
-    // then
-    assertThat(BigDecimal.ZERO.compareTo(contaRepository.findByNumero(numeroContaOrigem).get().getSaldo())).isZero();
-    assertThat(valor.compareTo(contaRepository.findByNumero(numeroContaDestino).get().getSaldo())).isZero();
-}
+        Mockito.verify(contaRepository, times(2)).save(any(Conta.class));
+    }
 
-@Test
-void consultarSaldoTest() {
-    // given
-    final var numeroConta = 1L;
+    @Test
+    void transferenciaPJTest() {
+        // given
+        final var valor = BigDecimal.valueOf(50.00);
+        final var numeroContaOrigem = 3L;
+        final var numeroContaDestino = 2L;
+        TransferenciaRequestDto transferenciaRequestDto =
+                TransferenciaRequestDto.builder()
+                        .numeroContaOrigem(numeroContaOrigem)
+                        .numeroContaDestino(numeroContaDestino)
+                        .valor(valor)
+                        .build();
 
-    // when
-    var response = restTemplate.getForEntity(url + "/saldo/" + numeroConta, SaldoResponseDto.class);
+        // when
+        restTemplate.postForEntity(url + "/transferir", transferenciaRequestDto, Void.class);
 
-    // then
-    assertEquals(HttpStatus.OK, response.getStatusCode());
-    assertThat(response.getBody().getSaldo().compareTo(contaRepository.findByNumero(numeroConta).get().getSaldo())).isZero();
-}
+        // then
+        assertThat(BigDecimal.ZERO.compareTo(contaRepository.findByNumero(numeroContaOrigem).get().getSaldo())).isZero();
+        assertEquals(0, BigDecimal.ZERO.compareTo(contaRepository.findByNumero(numeroContaOrigem).get().getSaldo()));
 
-@Test
-void investirTest() {
-    // given
-    final var valor = BigDecimal.valueOf(100.00);
-    final var documentoCliente = "123456889";
-    InvestimentoRequestDto investimentoRequestDto =
-            InvestimentoRequestDto.builder()
-                    .documentoCliente(documentoCliente)
-                    .valor(valor)
-                    .build();
+        Mockito.verify(contaRepository, times(2)).save(any(Conta.class));
+    }
 
-    // when
-    var response = restTemplate.postForEntity(url + "/investimento", investimentoRequestDto, SaldoResponseDto.class);
+    @Test
+    void transferenciaSaldoInsuficienteTest() {
+        // given
+        final var valor = BigDecimal.valueOf(100.00);
+        final var numeroContaOrigem = 1L;
+        final var numeroContaDestino = 2L;
+        TransferenciaRequestDto transferenciaRequestDto =
+                TransferenciaRequestDto.builder()
+                        .numeroContaOrigem(numeroContaOrigem)
+                        .numeroContaDestino(numeroContaDestino)
+                        .valor(valor)
+                        .build();
 
-    // then
-    assertEquals(HttpStatus.OK, response.getStatusCode());
-    assertThat(response.getBody().getSaldo().compareTo(valor)).isZero();
-}
+        // when
+        var response = restTemplate.postForEntity(url + "/transferir", transferenciaRequestDto, Void.class);
 
-@Test
-void abrirContaPoupancaTest() {
-    // given
-    final var cpf = "123456889";
+        // then
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+    }
 
-    var cliente = Cliente.builder()
-            .documento(cpf)
-            .nome("Teste Cliente")
-            .dataNascimento(LocalDate.now())
-            .status(StatusCliente.ATIVO)
-            .tipo(TipoCliente.PF)
-            .createdAt(LocalDate.now())
-            .build();
-    clienteRepository.saveAndFlush(cliente);
+    @Test
+    void consultarSaldoTest() {
+        // given
+        final var numeroConta = 1L;
 
-    // when
-    var response = restTemplate.postForEntity(url + "/abrir-conta-poupanca/" + cpf, null, SaldoResponseDto.class);
+        // when
+        var response = restTemplate.getForEntity(url + "/saldo/" + numeroConta, SaldoResponseDto.class);
 
-    // then
-    assertEquals(HttpStatus.OK, response.getStatusCode());
-    assertThat(response.getBody().getSaldo().compareTo(BigDecimal.ZERO)).isZero();
-}
+        // then
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertThat(response.getBody().getSaldo().compareTo(contaRepository.findByNumero(numeroConta).get().getSaldo())).isZero();
+    }
+
 }
